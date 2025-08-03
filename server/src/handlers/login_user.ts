@@ -23,9 +23,8 @@ export const loginUser = async (input: LoginInput): Promise<User | null> => {
       return null;
     }
 
-    // In a real implementation, you would use bcrypt.compare here
-    // For now, we'll do a simple string comparison (NOT secure for production)
-    const isPasswordValid = user.password_hash === input.password;
+    // Use Bun's secure password verification
+    const isPasswordValid = await Bun.password.verify(input.password, user.password_hash);
 
     if (!isPasswordValid) {
       return null;

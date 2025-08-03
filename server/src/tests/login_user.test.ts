@@ -7,20 +7,20 @@ import { type LoginInput } from '../schema';
 import { loginUser } from '../handlers/login_user';
 
 // Test inputs
+const testPassword = 'test_password_123';
 const testUser = {
   email: 'test@example.com',
-  password_hash: 'test_password_123',
   name: 'Test User'
 };
 
 const loginInput: LoginInput = {
   email: 'test@example.com',
-  password: 'test_password_123'
+  password: testPassword
 };
 
 const invalidLoginInput: LoginInput = {
   email: 'test@example.com',
-  password: 'wrong_password'
+  password: 'wrong_password_456'
 };
 
 const nonExistentUserInput: LoginInput = {
@@ -33,9 +33,15 @@ describe('loginUser', () => {
   afterEach(resetDB);
 
   it('should return user when credentials are valid', async () => {
-    // Create test user
+    // Hash the password for storage
+    const hashedPassword = await Bun.password.hash(testPassword);
+    
+    // Create test user with hashed password
     await db.insert(usersTable)
-      .values(testUser)
+      .values({
+        ...testUser,
+        password_hash: hashedPassword
+      })
       .execute();
 
     const result = await loginUser(loginInput);
@@ -43,7 +49,7 @@ describe('loginUser', () => {
     expect(result).not.toBeNull();
     expect(result!.email).toEqual(testUser.email);
     expect(result!.name).toEqual(testUser.name);
-    expect(result!.password_hash).toEqual(testUser.password_hash);
+    expect(result!.password_hash).toEqual(hashedPassword);
     expect(result!.google_id).toBeNull();
     expect(result!.id).toBeDefined();
     expect(result!.created_at).toBeInstanceOf(Date);
@@ -51,9 +57,15 @@ describe('loginUser', () => {
   });
 
   it('should return null when password is incorrect', async () => {
-    // Create test user
+    // Hash the password for storage
+    const hashedPassword = await Bun.password.hash(testPassword);
+    
+    // Create test user with hashed password
     await db.insert(usersTable)
-      .values(testUser)
+      .values({
+        ...testUser,
+        password_hash: hashedPassword
+      })
       .execute();
 
     const result = await loginUser(invalidLoginInput);
@@ -91,14 +103,20 @@ describe('loginUser', () => {
   });
 
   it('should handle case-sensitive email matching', async () => {
-    // Create test user
+    // Hash the password for storage
+    const hashedPassword = await Bun.password.hash(testPassword);
+    
+    // Create test user with hashed password
     await db.insert(usersTable)
-      .values(testUser)
+      .values({
+        ...testUser,
+        password_hash: hashedPassword
+      })
       .execute();
 
     const uppercaseEmailInput: LoginInput = {
       email: 'TEST@EXAMPLE.COM',
-      password: 'test_password_123'
+      password: testPassword
     };
 
     const result = await loginUser(uppercaseEmailInput);

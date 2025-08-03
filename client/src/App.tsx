@@ -16,23 +16,28 @@ import type {
   CreatePlaceInput, 
   UpdatePlaceInput, 
   PlaceStats, 
-  LoginInput
+  LoginInput,
+  User
 } from '../../server/src/schema';
 import { vietnameseCities, placeTypes } from '../../server/src/schema';
 import { MapPin, Heart, BarChart3, LogOut, Eye, EyeOff, Trash2, Edit } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
-// Using localStorage for user management since auth handlers are stubs
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
+// Use the User type from schema instead of local interface
 
 function App() {
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Convert date strings back to Date objects
+      return {
+        ...parsed,
+        created_at: new Date(parsed.created_at),
+        updated_at: new Date(parsed.updated_at)
+      };
+    }
+    return null;
   });
   const [places, setPlaces] = useState<Place[]>([]);
   const [stats, setStats] = useState<PlaceStats>({
@@ -48,11 +53,13 @@ function App() {
 
   // Authentication form state
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [authData, setAuthData] = useState<LoginInput & { name?: string }>({
+  const [authData, setAuthData] = useState<LoginInput & { name: string }>({
     email: '',
     password: '',
     name: ''
   });
+
+  // Note: Google auth implementation would require OAuth setup
 
   // Place form state
   const [placeFormData, setPlaceFormData] = useState<Omit<CreatePlaceInput, 'user_id'>>({
@@ -118,19 +125,63 @@ function App() {
     setError(null);
     
     try {
-      // Since auth handlers are stubs, create demo user
-      const demoUser: User = {
-        id: 1,
-        name: authData.name || 'Demo User',
-        email: authData.email
-      };
-      setUser(demoUser);
-      localStorage.setItem('user', JSON.stringify(demoUser));
+      let user: User | null = null;
+
+      if (authMode === 'register') {
+        // Call register endpoint
+        if (!authData.name) {
+          setError('Name is required for registration');
+          return;
+        }
+        
+        user = await trpc.register.mutate({
+          email: authData.email,
+          password: authData.password,
+          name: authData.name
+        });
+      } else {
+        // Call login endpoint
+        user = await trpc.login.mutate({
+          email: authData.email,
+          password: authData.password
+        });
+
+        if (!user) {
+          setError('Invalid email or password');
+          return;
+        }
+      }
+
+      // Store user info in localStorage
+      setUser(user);
+      localStorage.setItem('user', JSON.stringify(user));
       
+      // Reset form
       setAuthData({ email: '', password: '', name: '' });
-    } catch (error) {
-      setError('Authentication failed');
+    } catch (error: unknown) {
       console.error('Auth error:', error);
+      if (error && typeof error === 'object' && 'message' in error) {
+        setError(error.message as string);
+      } else {
+        setError(authMode === 'register' ? 'Registration failed' : 'Login failed');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Google authentication handler (placeholder for future OAuth implementation)
+  const handleGoogleAuth = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // This would typically be integrated with Google OAuth flow
+      // For now, show message that this feature needs OAuth setup
+      setError('Google authentication requires OAuth setup. Please use email/password for now.');
+    } catch (error: unknown) {
+      console.error('Google auth error:', error);
+      setError('Google authentication failed');
     } finally {
       setIsLoading(false);
     }
@@ -288,7 +339,7 @@ function App() {
                   {authMode === 'register' && (
                     <Input
                       placeholder="Full Name"
-                      value={authData.name || ''}
+                      value={authData.name}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         setAuthData((prev) => ({ ...prev, name: e.target.value }))
                       }
@@ -324,6 +375,25 @@ function App() {
                   
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'Processing...' : (authMode === 'login' ? 'Login' : 'Create Account')}
+                  </Button>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">Or</span>
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    className="w-full" 
+                    onClick={handleGoogleAuth}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Processing...' : '🇬 Continue with Google'}
                   </Button>
                 </form>
               </Tabs>
